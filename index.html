@@ -1,0 +1,257 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPS Counter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #clickArea {
+            width: 200px;
+            height: 200px;
+            background-color: #4CAF50;
+            margin: 20px auto;
+            cursor: pointer;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            user-select: none;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+        #clickArea:hover {
+            background-color: #45a049;
+        }
+        #clickArea:active {
+            transform: scale(0.95);
+            background-color: #3d8b40;
+        }
+        #timerInput {
+            padding: 10px;
+            font-size: 16px;
+            margin: 10px 0;
+            width: 100px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            transition: border-color 0.3s ease;
+        }
+        #timerInput:focus {
+            border-color: #008CBA;
+            outline: none;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 24px;
+        }
+        .cps-bounce {
+            animation: bounce 0.3s ease;
+        }
+        #timer {
+            font-size: 18px;
+            color: #555;
+        }
+        #resultsModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.5s ease;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            transform: translateY(-50px);
+            animation: slideIn 0.5s ease forwards;
+            position: relative;
+        }
+        #closeBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            color: #333;
+            transition: color 0.2s ease;
+        }
+        #closeBtn:hover {
+            color: #ff0000;
+        }
+        @keyframes bounce {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CPS Counter</h1>
+        <label for="timerInput">Test Duration (seconds):</label>
+        <input type="number" id="timerInput" value="5" min="1" max="60">
+        <div id="clickArea" onclick="countClick()">Click Here</div>
+        <div id="timer">Time: 0.0s</div>
+        <div id="result">CPS: 0.0</div>
+    </div>
+
+    <div id="resultsModal">
+        <div class="modal-content">
+            <button id="closeBtn" onclick="closeModal()">X</button>
+            <h2>Test Results</h2>
+            <p id="finalResult">CPS: 0.0</p>
+            <p id="totalClicks">Total Clicks: 0</p>
+        </div>
+    </div>
+
+    <script>
+        let clicks = 0;
+        let timeLeft = 0;
+        let totalTime = 0;
+        let isRunning = false;
+        let timerInterval;
+        let lastClickTime = 0;
+
+        function countClick() {
+            if (isRunning) {
+                clicks++;
+                lastClickTime = totalTime - timeLeft;
+                updateCPS();
+                return;
+            }
+            // Start the test on first click
+            const inputTime = parseFloat(document.getElementById('timerInput').value);
+            if (isNaN(inputTime) || inputTime < 1 || inputTime > 60) {
+                alert('Please enter a valid duration between 1 and 60 seconds.');
+                return;
+            }
+            clicks = 0;
+            totalTime = inputTime;
+            timeLeft = inputTime;
+            lastClickTime = 0;
+            isRunning = true;
+            document.getElementById('timerInput').disabled = true;
+            document.getElementById('result').textContent = 'CPS: 0.0';
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 100);
+            clicks++;
+            lastClickTime = totalTime - timeLeft;
+            updateCPS();
+        }
+
+        function updateTimer() {
+            timeLeft -= 0.1;
+            document.getElementById('timer').textContent = `Time: ${timeLeft.toFixed(1)}s`;
+            updateCPS();
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                isRunning = false;
+                document.getElementById('timerInput').disabled = false;
+                showResults();
+            }
+        }
+
+        function updateCPS() {
+            if (isRunning) {
+                const elapsedTime = totalTime - timeLeft;
+                const cps = elapsedTime > 0 ? clicks / elapsedTime : 0;
+                const resultDiv = document.getElementById('result');
+                resultDiv.textContent = `CPS: ${cps.toFixed(1)}`;
+                resultDiv.classList.remove('cps-bounce');
+                void resultDiv.offsetWidth; // Force reflow
+                resultDiv.classList.add('cps-bounce');
+            }
+        }
+
+        function showResults() {
+            const finalCPS = clicks / totalTime;
+            document.getElementById('finalResult').textContent = `CPS: ${finalCPS.toFixed(1)}`;
+            document.getElementById('totalClicks').textContent = `Total Clicks: ${clicks}`;
+            document.getElementById('resultsModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('resultsModal').style.display = 'none';
+            document.getElementById('result').textContent = 'CPS: 0.0';
+            document.getElementById('timer').textContent = 'Time: 0.0s';
+            clicks = 0;
+            timeLeft = 0;
+            lastClickTime = 0;
+        }
+    </script>
+</body>
+</html>
