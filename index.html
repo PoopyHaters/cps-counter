@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -52,7 +13,15 @@
             justify-content: center;
             height: 100vh;
             margin: 0;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        body.light {
             background-color: #f0f0f0;
+            color: #333;
+        }
+        body.dark {
+            background-color: #333;
+            color: #fff;
         }
         .container {
             text-align: center;
@@ -61,8 +30,34 @@
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
+        body.dark .container {
+            background-color: #444;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
+        }
+        #themeToggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            font-size: 16px;
+            border-radius: 5px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        body.dark #themeToggle {
+            background-color: #006d93;
+        }
+        #themeToggle:hover {
+            background-color: #006d93;
+        }
+        body.dark #themeToggle:hover {
+            background-color: #005f7f;
+        }
         #clickArea {
-            width: 200px;
+            width: 300px;
             height: 200px;
             background-color: #4CAF50;
             margin: 20px auto;
@@ -76,12 +71,21 @@
             user-select: none;
             transition: background-color 0.3s ease, transform 0.1s ease;
         }
+        body.dark #clickArea {
+            background-color: #0288D1;
+        }
         #clickArea:hover {
             background-color: #45a049;
+        }
+        body.dark #clickArea:hover {
+            background-color: #0277BD;
         }
         #clickArea:active {
             transform: scale(0.95);
             background-color: #3d8b40;
+        }
+        body.dark #clickArea:active {
+            background-color: #01579B;
         }
         #timerInput {
             padding: 10px;
@@ -92,9 +96,17 @@
             border-radius: 5px;
             transition: border-color 0.3s ease;
         }
+        body.dark #timerInput {
+            background-color: #555;
+            color: #fff;
+            border-color: #666;
+        }
         #timerInput:focus {
             border-color: #008CBA;
             outline: none;
+        }
+        body.dark #timerInput:focus {
+            border-color: #006d93;
         }
         #result {
             margin-top: 20px;
@@ -106,6 +118,9 @@
         #timer {
             font-size: 18px;
             color: #555;
+        }
+        body.dark #timer {
+            color: #bbb;
         }
         #resultsModal {
             display: none;
@@ -129,16 +144,24 @@
             animation: slideIn 0.5s ease forwards;
             position: relative;
         }
+        body.dark .modal-content {
+            background-color: #444;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
+        }
         #closeBtn {
             position: absolute;
             top: 10px;
             right: 10px;
-            font-size: 20px;
+            font-size: 24px;
+            padding: 10px 15px;
             cursor: pointer;
             background: none;
             border: none;
             color: #333;
             transition: color 0.2s ease;
+        }
+        body.dark #closeBtn {
+            color: #fff;
         }
         #closeBtn:hover {
             color: #ff0000;
@@ -158,7 +181,8 @@
         }
     </style>
 </head>
-<body>
+<body class="light">
+    <button id="themeToggle" onclick="toggleTheme()">Dark Theme</button>
     <div class="container">
         <h1>CPS Counter</h1>
         <label for="timerInput">Test Duration (seconds):</label>
@@ -185,6 +209,19 @@
         let timerInterval;
         let lastClickTime = 0;
 
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.body.className = savedTheme;
+        document.getElementById('themeToggle').textContent = savedTheme === 'light' ? 'Dark Theme' : 'Light Theme';
+
+        function toggleTheme() {
+            const currentTheme = document.body.className;
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            document.body.className = newTheme;
+            document.getElementById('themeToggle').textContent = newTheme === 'light' ? 'Dark Theme' : 'Light Theme';
+            localStorage.setItem('theme', newTheme);
+        }
+
         function countClick() {
             if (isRunning) {
                 clicks++;
@@ -192,7 +229,6 @@
                 updateCPS();
                 return;
             }
-            // Start the test on first click
             const inputTime = parseFloat(document.getElementById('timerInput').value);
             if (isNaN(inputTime) || inputTime < 1 || inputTime > 60) {
                 alert('Please enter a valid duration between 1 and 60 seconds.');
